@@ -68,7 +68,8 @@ namespace JpegLibrary.ScanDecoder
 
             for (int i = 0; i < 64; i++)
             {
-                Unsafe.Add(ref destinationRef, i) = (short)(JpegMathHelper.RoundToInt32(Unsafe.Add(ref sourceRef, i)) + levelShift);
+                int value = JpegMathHelper.RoundToInt32(Unsafe.Add(ref sourceRef, i)) + levelShift;
+                Unsafe.Add(ref destinationRef, i) = (short)Math.Max(0, Math.Min(255, value));
             }
         }
     }
