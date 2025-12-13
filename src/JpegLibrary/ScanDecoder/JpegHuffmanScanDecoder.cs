@@ -80,8 +80,29 @@ namespace JpegLibrary.ScanDecoder
 
         protected static int DecodeHuffmanCode(ref JpegBitReader reader, JpegHuffmanDecodingTable table)
         {
+            // CRITICAL: Check for markers BEFORE PeekBits!
+            // TryPeekMarker() only works when the bit buffer is empty (_bitsInBuffer == 0).
+            // If we call PeekBits first, it loads the buffer and TryPeekMarker will always return 0.
+            JpegMarker marker = reader.TryPeekMarker();
+            if (marker != 0)
+            {
+                // We've hit a marker boundary - end of scan data reached
+                // Return EOB symbol (0x00) to signal end of block
+                System.Diagnostics.Debug.WriteLine($"[JPEG] Marker {marker:X} detected at boundary, returning EOB");
+                return 0x00;
+            }
+
             int bits = reader.PeekBits(16, out int bitsRead);
+
+            // If we didn't get enough bits and they look like padding, return EOB
+            if (bitsRead < 16 && (bits & 0xFFFF) == 0xFFFF)
+            {
+                System.Diagnostics.Debug.WriteLine($"[JPEG] Insufficient bits with 0xFFFF padding detected, returning EOB");
+                return 0x00;
+            }
+
             JpegHuffmanDecodingTable.Entry entry = table.Lookup(bits);
+
             bitsRead = Math.Min(entry.CodeSize, bitsRead);
             _ = reader.TryAdvanceBits(bitsRead, out _);
             return entry.SymbolValue;
@@ -89,7 +110,31 @@ namespace JpegLibrary.ScanDecoder
 
         protected static JpegHuffmanDecodingTable.Entry DecodeHuffmanCode(ref JpegBitReader reader, JpegHuffmanDecodingTable table, out int code, out int bitsRead)
         {
+            // CRITICAL: Check for markers BEFORE PeekBits!
+            // TryPeekMarker() only works when the bit buffer is empty (_bitsInBuffer == 0).
+            // If we call PeekBits first, it loads the buffer and TryPeekMarker will always return 0.
+            JpegMarker marker = reader.TryPeekMarker();
+            if (marker != 0)
+            {
+                // We've hit a marker boundary - end of scan data reached
+                // Return EOB entry (code size 0, symbol 0x00)
+                System.Diagnostics.Debug.WriteLine($"[JPEG] Marker {marker:X} detected at boundary, returning EOB");
+                code = 0;
+                bitsRead = 0;
+                return new JpegHuffmanDecodingTable.Entry { CodeSize = 0, SymbolValue = 0x00 };
+            }
+
             int bits = reader.PeekBits(16, out bitsRead);
+
+            // If we didn't get enough bits and they look like padding, return EOB
+            if (bitsRead < 16 && (bits & 0xFFFF) == 0xFFFF)
+            {
+                System.Diagnostics.Debug.WriteLine($"[JPEG] Insufficient bits with 0xFFFF padding detected, returning EOB");
+                code = 0;
+                bitsRead = 0;
+                return new JpegHuffmanDecodingTable.Entry { CodeSize = 0, SymbolValue = 0x00 };
+            }
+
             JpegHuffmanDecodingTable.Entry entry = table.Lookup(bits);
             bitsRead = Math.Min(entry.CodeSize, bitsRead);
             _ = reader.TryAdvanceBits(bitsRead, out _);

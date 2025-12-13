@@ -80,19 +80,35 @@ namespace JpegLibrary.ScanDecoder
                 }
             }
 
-            // Prepare
+            // FIX: For non-interleaved scans (single component), always use 1x1 sampling
+            // regardless of what the frame header specifies. This matches the behavior of
+            // libjpeg-turbo (see jdinput.c:177-178) and is required by the JPEG specification.
+            // Non-interleaved scans have one component and one block per MCU.
             int maxHorizontalSampling = _maxHorizontalSampling;
             int maxVerticalSampling = _maxVerticalSampling;
+
+            if (components.Length == 1)
+            {
+                components[0].HorizontalSamplingFactor = 1;
+                components[0].VerticalSamplingFactor = 1;
+                components[0].HorizontalSubsamplingFactor = 1;
+                components[0].VerticalSubsamplingFactor = 1;
+                maxHorizontalSampling = 1;
+                maxVerticalSampling = 1;
+            }
+
+            // Prepare
             int mcusBeforeRestart = _restartInterval;
-            int mcusPerLine = _mcusPerLine;
-            int mcusPerColumn = _mcusPerColumn;
+            // Recalculate MCU counts with the (possibly overridden) sampling factors
+            int mcusPerLine = (_frameHeader.SamplesPerLine + maxHorizontalSampling * 8 - 1) / (maxHorizontalSampling * 8);
+            int mcusPerColumn = (_frameHeader.NumberOfLines + maxVerticalSampling * 8 - 1) / (maxVerticalSampling * 8);
             int levelShift = _levelShift;
             JpegBitReader bitReader = new JpegBitReader(reader.RemainingBytes);
 
             // DCT Block
-            Unsafe.SkipInit(out JpegBlock8x8F blockFBuffer);
-            Unsafe.SkipInit(out JpegBlock8x8F outputFBuffer);
-            Unsafe.SkipInit(out JpegBlock8x8F tempFBuffer);
+            JpegBlock8x8F blockFBuffer = default;
+            JpegBlock8x8F outputFBuffer = default;
+            JpegBlock8x8F tempFBuffer = default;
 
             JpegBlock8x8 outputBuffer;
 
@@ -184,13 +200,14 @@ namespace JpegLibrary.ScanDecoder
             Debug.Assert(component.AcTable is not null);
 
             // DC
-            int t = DecodeHuffmanCode(ref reader, component.DcTable!);
-            if (t != 0)
+            int huffmanSymbol = DecodeHuffmanCode(ref reader, component.DcTable!);
+            int dcDiff = 0;
+            if (huffmanSymbol != 0)
             {
-                t = ReceiveAndExtend(ref reader, t);
+                dcDiff = ReceiveAndExtend(ref reader, huffmanSymbol);
             }
 
-            t += component.DcPredictor;
+            int t = dcDiff + component.DcPredictor;
             component.DcPredictor = t;
             destinationRef = (short)t;
 

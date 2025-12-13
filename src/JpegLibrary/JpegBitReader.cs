@@ -181,7 +181,20 @@ namespace JpegLibrary
                     return false;
                 }
             }
-            _bitsInBuffer = (byte)(_bitsInBuffer - length);
+
+            // Remove consumed bits from buffer by masking to keep only bottom bits
+            int newBitsInBuffer = _bitsInBuffer - length;
+            if (newBitsInBuffer > 0)
+            {
+                ulong mask = (1UL << newBitsInBuffer) - 1;
+                _buffer &= mask;
+            }
+            else
+            {
+                _buffer = 0;
+            }
+            _bitsInBuffer = (byte)newBitsInBuffer;
+
             isMarkerEncountered = false;
             return true;
         }
@@ -197,8 +210,22 @@ namespace JpegLibrary
                     return false;
                 }
             }
-            _bitsInBuffer = (byte)(_bitsInBuffer - length);
-            bits = (int)(_buffer >> _bitsInBuffer) & ((1 << length) - 1);
+
+            int newBitsInBuffer = _bitsInBuffer - length;
+            bits = (int)(_buffer >> newBitsInBuffer) & ((1 << length) - 1);
+
+            // Remove consumed bits from buffer by masking to keep only bottom bits
+            if (newBitsInBuffer > 0)
+            {
+                ulong mask = (1UL << newBitsInBuffer) - 1;
+                _buffer &= mask;
+            }
+            else
+            {
+                _buffer = 0;
+            }
+            _bitsInBuffer = (byte)newBitsInBuffer;
+
             isMarkerEncountered = false;
             return true;
         }

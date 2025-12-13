@@ -142,6 +142,9 @@ namespace JpegLibrary
                 case JpegMarker.DefineQuantizationTable:
                     ProcessDefineQuantizationTable(ref reader, loadQuantizationTables);
                     break;
+                case JpegMarker.DefineHuffmanTable:
+                    ProcessDefineHuffmanTable(ref reader);
+                    break;
                 case JpegMarker.DefineRestart0:
                 case JpegMarker.DefineRestart1:
                 case JpegMarker.DefineRestart2:
